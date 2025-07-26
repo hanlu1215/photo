@@ -125,8 +125,15 @@ class WiFiReceiverGUI:
                                       width=15, height=2, font=("Arial", 10))
         self.send_image_btn.pack(side="left", padx=5)
         
-        # 退出程序按钮
-        self.quit_btn = tk.Button(row2_frame, text="退出程序", 
+        # 停止发送端按钮
+        self.stop_sender_btn = tk.Button(row2_frame, text="停止发送端", 
+                                       command=self.stop_sender,
+                                       width=15, height=2, font=("Arial", 10),
+                                       bg="orange", fg="white")
+        self.stop_sender_btn.pack(side="left", padx=5)
+        
+        # 退出GUI按钮
+        self.quit_btn = tk.Button(row2_frame, text="退出GUI", 
                                 command=self.on_closing,
                                 width=15, height=2, font=("Arial", 10),
                                 bg="red", fg="white")
@@ -307,6 +314,12 @@ class WiFiReceiverGUI:
         """发送当前图像"""
         self.send_command("s")
         self.log_message("请求发送当前图像")
+    
+    def stop_sender(self):
+        """停止发送端程序"""
+        if messagebox.askokcancel("停止发送端", "确定要停止发送端程序吗？"):
+            self.send_command("quit")
+            self.log_message("已发送停止指令给发送端")
     
     def send_command(self, command):
         """发送指令到发送端"""
@@ -540,9 +553,9 @@ class WiFiReceiverGUI:
     def on_closing(self):
         """处理窗口关闭事件"""
         global running
-        if messagebox.askokcancel("退出", "确定要退出程序吗？"):
-            self.log_message("用户请求退出程序...")
-            self.send_command("quit")
+        if messagebox.askokcancel("退出", "确定要退出GUI程序吗？"):
+            self.log_message("用户请求退出GUI程序...")
+            # 只退出GUI，不向发送端发送退出指令
             running = False
             self.root.quit()
             self.root.destroy()

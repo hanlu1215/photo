@@ -362,8 +362,8 @@ class CameraManager:
                 print("OpenCV图像捕获失败：无法读取帧")
                 return None
             
-            # 上下翻转图像
-            frame = cv2.flip(frame, 0)  # 0表示垂直翻转（上下翻转）
+            # 旋转图像180度
+            frame = cv2.rotate(frame, cv2.ROTATE_180)
             
             # 添加时间水印在右上角
             current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -399,7 +399,7 @@ class CameraManager:
             image_data = buffer.tobytes()
             
             if len(image_data) > 0:
-                print(f"OpenCV图像捕获成功（已翻转并添加时间水印），大小: {len(image_data)} 字节")
+                print(f"OpenCV图像捕获成功（已旋转180度并添加时间水印），大小: {len(image_data)} 字节")
                 return image_data
             else:
                 print("OpenCV图像捕获失败：编码数据为空")
@@ -446,8 +446,8 @@ class CameraManager:
                 frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
                 
                 if frame is not None:
-                    # 上下翻转图像
-                    frame = cv2.flip(frame, 0)  # 0表示垂直翻转（上下翻转）
+                    # 旋转图像180度
+                    frame = cv2.rotate(frame, cv2.ROTATE_180)
                     
                     # 添加时间水印在右上角
                     current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -478,7 +478,7 @@ class CameraManager:
                     
                     if ret:
                         image_data = buffer.tobytes()
-                        print(f"PiCamera图像捕获成功（已翻转并添加时间水印），大小: {len(image_data)} 字节")
+                        print(f"PiCamera图像捕获成功（已旋转180度并添加时间水印），大小: {len(image_data)} 字节")
                     else:
                         print(f"PiCamera图像后处理编码失败，使用原始图像，大小: {len(image_data)} 字节")
                 else:

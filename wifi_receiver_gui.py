@@ -30,13 +30,11 @@ latest_sensor_data = None  # 存储最新的传感器数据
 
 # 状态变量
 monitoring_status = False
-recording_status = False
 data_recording_status = False
 combined_status = False
 
 # 记录时间相关变量
 monitoring_start_time = None
-recording_start_time = None
 data_recording_start_time = None
 combined_start_time = None
 
@@ -96,12 +94,6 @@ class WiFiReceiverGUI:
                                       command=self.toggle_monitoring,
                                       width=15, height=2, font=("Arial", 10))
         self.monitoring_btn.pack(side="left", padx=5)
-        
-        # 录像控制按钮
-        self.recording_btn = tk.Button(row1_frame, text="开启录像", 
-                                     command=self.toggle_recording,
-                                     width=15, height=2, font=("Arial", 10))
-        self.recording_btn.pack(side="left", padx=5)
         
         # 数据记录控制按钮
         self.data_recording_btn = tk.Button(row1_frame, text="开启数据记录", 
@@ -208,10 +200,6 @@ class WiFiReceiverGUI:
         self.monitoring_time_label.pack(fill="x", pady=2)
         
         # 记录时间显示标签
-        self.recording_time_label = tk.Label(info_frame, text="录像时长: 未开始", 
-                                           font=("Arial", 10), anchor="w", fg="blue")
-        self.recording_time_label.pack(fill="x", pady=2)
-        
         self.data_recording_time_label = tk.Label(info_frame, text="数据记录时长: 未开始", 
                                                 font=("Arial", 10), anchor="w", fg="green")
         self.data_recording_time_label.pack(fill="x", pady=2)
@@ -261,22 +249,6 @@ class WiFiReceiverGUI:
             monitoring_start_time = None
             self.monitoring_btn.config(text="开启数据监测", bg="SystemButtonFace")
             self.log_message("停止数据监测")
-    
-    def toggle_recording(self):
-        """切换录像状态"""
-        global recording_status, recording_start_time
-        if not recording_status:
-            self.send_command("rb")
-            recording_status = True
-            recording_start_time = datetime.datetime.now()
-            self.recording_btn.config(text="停止录像", bg="orange")
-            self.log_message("开启延时录像")
-        else:
-            self.send_command("rs")
-            recording_status = False
-            recording_start_time = None
-            self.recording_btn.config(text="开启录像", bg="SystemButtonFace")
-            self.log_message("停止延时录像")
     
     def toggle_data_recording(self):
         """切换数据记录状态"""
@@ -336,10 +308,10 @@ class WiFiReceiverGUI:
     
     def update_sensor_data_display(self):
         """更新传感器数据显示"""
-        global latest_sensor_data, monitoring_status, recording_status, data_recording_status, combined_status
+        global latest_sensor_data, monitoring_status, data_recording_status, combined_status
         
-        # 检查是否应该显示数据（数据监测、录像、数据记录或录像+数据模式下）
-        should_display_data = monitoring_status or recording_status or data_recording_status or combined_status
+        # 检查是否应该显示数据（数据监测、数据记录或录像+数据模式下）
+        should_display_data = monitoring_status or data_recording_status or combined_status
         
         if should_display_data and latest_sensor_data:
             # 获取ADC数据
@@ -465,16 +437,15 @@ class WiFiReceiverGUI:
     
     def update_recording_times(self):
         """更新记录时间显示"""
-        global monitoring_status, recording_status, data_recording_status, combined_status
-        global monitoring_start_time, recording_start_time, data_recording_start_time, combined_start_time
+        global monitoring_status, data_recording_status, combined_status
+        global monitoring_start_time, data_recording_start_time, combined_start_time
         
         current_time = datetime.datetime.now()
         
         # 优先显示记录时长逻辑：
         # 1. 如果有录像+数据记录，优先显示录像+数据时长
-        # 2. 如果有单独的录像记录，显示录像时长
-        # 3. 如果有单独的数据记录，显示数据记录时长
-        # 4. 最后才显示数据监测时长
+        # 2. 如果有单独的数据记录，显示数据记录时长
+        # 3. 最后才显示数据监测时长
         
         main_display_set = False  # 标记是否已设置主要显示内容
         
@@ -482,26 +453,14 @@ class WiFiReceiverGUI:
         if combined_status and combined_start_time:
             elapsed = current_time - combined_start_time
             elapsed_str = self.format_elapsed_time(elapsed)
-            self.combined_time_label.config(text=f"延时录像+数据时长: {elapsed_str}", fg="lightgreen")
+            self.combined_time_label.config(text=f"录像+数据时长: {elapsed_str}", fg="lightgreen")
             # 同时更新数据监测显示为记录时长
-            self.monitoring_time_label.config(text=f"记录时长: {elapsed_str}", fg="lightgreen")
+            self.monitoring_time_label.config(text=f"录像+数据时长: {elapsed_str}", fg="lightgreen")
             main_display_set = True
         else:
-            self.combined_time_label.config(text="延时录像+数据时长: 未开始", fg="gray")
+            self.combined_time_label.config(text="录像+数据时长: 未开始", fg="gray")
         
-        # 更新录像时间（第二优先级）
-        if recording_status and recording_start_time:
-            elapsed = current_time - recording_start_time
-            elapsed_str = self.format_elapsed_time(elapsed)
-            self.recording_time_label.config(text=f"延时录像时长: {elapsed_str}", fg="orange")
-            # 如果没有更高优先级的记录，则显示录像时长
-            if not main_display_set:
-                self.monitoring_time_label.config(text=f"录像时长: {elapsed_str}", fg="orange")
-                main_display_set = True
-        else:
-            self.recording_time_label.config(text="延时录像时长: 未开始", fg="gray")
-        
-        # 更新数据记录时间（第三优先级）
+        # 更新数据记录时间（第二优先级）
         if data_recording_status and data_recording_start_time:
             elapsed = current_time - data_recording_start_time
             elapsed_str = self.format_elapsed_time(elapsed)
@@ -600,9 +559,35 @@ def connect_to_sender():
                 # 连接成功后，清空运行状态以便GUI及时更新
                 last_runtime_status = ""
                 
+                # 重置状态变量，准备从发送端同步最新状态
+                global monitoring_status, data_recording_status, combined_status
+                global monitoring_start_time, data_recording_start_time, combined_start_time
+                monitoring_status = False
+                data_recording_status = False
+                combined_status = False
+                monitoring_start_time = None
+                data_recording_start_time = None
+                combined_start_time = None
+                
                 # 监听状态消息
                 status_thread = threading.Thread(target=listen_status, daemon=True)
                 status_thread.start()
+                
+                # 请求发送端当前状态更新
+                if gui:
+                    gui.log_message("正在同步发送端状态...")
+                    # 给发送端一点时间建立连接，然后请求状态同步
+                    def request_status_sync():
+                        time.sleep(1)  # 等待1秒确保连接稳定
+                        if command_connected and command_socket:
+                            try:
+                                # 请求状态同步（发送端会发送当前状态）
+                                command_socket.sendall("sync_status\n".encode())
+                            except:
+                                pass
+                    
+                    sync_thread = threading.Thread(target=request_status_sync, daemon=True)
+                    sync_thread.start()
                 
             except Exception as e:
                 if gui:
@@ -664,8 +649,8 @@ def listen_status():
 def process_structured_message(msg_obj):
     """处理结构化的JSON消息"""
     global last_runtime_status, last_gpio_data, last_temp_humidity, gui, latest_sensor_data
-    global monitoring_status, recording_status, data_recording_status, combined_status
-    global monitoring_start_time, recording_start_time, data_recording_start_time, combined_start_time
+    global monitoring_status, data_recording_status, combined_status
+    global monitoring_start_time, data_recording_start_time, combined_start_time
     
     msg_type = msg_obj.get("type", "")
     timestamp = msg_obj.get("timestamp", "")
@@ -682,7 +667,48 @@ def process_structured_message(msg_obj):
         
         i2c_str = "可用" if i2c_available else "不可用"
         
-        last_runtime_status = f"录像:{recording}, 数据记录:{data_recording}, 录像+数据:{combined}, I2C:{i2c_str}"
+        last_runtime_status = f"数据记录:{data_recording}, 录像+数据:{combined}, I2C:{i2c_str}"
+        
+        # 根据运行时状态同步GUI按钮状态
+        current_time = datetime.datetime.now()
+        
+        # 同步数据记录状态
+        if data_recording == "是" and not data_recording_status:
+            data_recording_status = True
+            if not data_recording_start_time:
+                data_recording_start_time = current_time
+            if gui:
+                gui.data_recording_btn.config(text="停止数据记录", bg="lightblue")
+                gui.log_message("[状态同步] 检测到正在记录数据，已同步按钮状态")
+        elif data_recording == "否" and data_recording_status:
+            data_recording_status = False
+            data_recording_start_time = None
+            if gui:
+                gui.data_recording_btn.config(text="开启数据记录", bg="SystemButtonFace")
+        
+        # 同步录像+数据状态
+        if combined == "是" and not combined_status:
+            combined_status = True
+            if not combined_start_time:
+                combined_start_time = current_time
+            if gui:
+                gui.combined_btn.config(text="停止录像+数据", bg="lightgreen")
+                gui.log_message("[状态同步] 检测到正在录像+数据记录，已同步按钮状态")
+        elif combined == "否" and combined_status:
+            combined_status = False
+            combined_start_time = None
+            if gui:
+                gui.combined_btn.config(text="录像+数据", bg="SystemButtonFace")
+        
+        # 同步数据监测状态（如果有任何数据记录在进行，通常数据监测也是开启的）
+        should_monitor = (data_recording == "是" or combined == "是")
+        if should_monitor and not monitoring_status:
+            monitoring_status = True
+            if not monitoring_start_time:
+                monitoring_start_time = current_time
+            if gui:
+                gui.monitoring_btn.config(text="停止数据监测", bg="lightgreen")
+                gui.log_message("[状态同步] 检测到数据监测已开启，已同步按钮状态")
         
     elif msg_type == MessageType.GPIO_DATA:
         # GPIO数据信息（现在包含传感器数据）- 更新latest_sensor_data
@@ -706,58 +732,60 @@ def process_structured_message(msg_obj):
         status_data = data
         current_time = datetime.datetime.now()
         
+        # 在状态同步时，不更新开始时间，保持原有的记录时间连续性
+        preserve_time = False
+        if isinstance(status_data, str) and status_data.endswith("_SYNC"):
+            preserve_time = True
+            status_data = status_data.replace("_SYNC", "")
+        
         if status_data == "DATA_MONITORING_STARTED":
             if not monitoring_status:
                 monitoring_status = True
-                monitoring_start_time = current_time
+                if not preserve_time or not monitoring_start_time:
+                    monitoring_start_time = current_time
                 if gui:
                     gui.monitoring_btn.config(text="停止数据监测", bg="lightgreen")
         elif status_data == "DATA_MONITORING_STOPPED":
             if monitoring_status:
                 monitoring_status = False
-                monitoring_start_time = None
+                if not preserve_time:
+                    monitoring_start_time = None
                 if gui:
                     gui.monitoring_btn.config(text="开启数据监测", bg="SystemButtonFace")
-        elif status_data == "TIMELAPSE_RECORDING_STARTED":
-            if not recording_status:
-                recording_status = True
-                recording_start_time = current_time
-                if gui:
-                    gui.recording_btn.config(text="停止录像", bg="orange")
-        elif status_data == "TIMELAPSE_RECORDING_STOPPED":
-            if recording_status:
-                recording_status = False
-                recording_start_time = None
-                if gui:
-                    gui.recording_btn.config(text="开启录像", bg="SystemButtonFace")
         elif status_data == "GPIO_MONITORING_STARTED":
             if not data_recording_status:
                 data_recording_status = True
-                data_recording_start_time = current_time
+                if not preserve_time or not data_recording_start_time:
+                    data_recording_start_time = current_time
                 if gui:
                     gui.data_recording_btn.config(text="停止数据记录", bg="lightblue")
         elif status_data == "GPIO_MONITORING_STOPPED":
             if data_recording_status:
                 data_recording_status = False
-                data_recording_start_time = None
+                if not preserve_time:
+                    data_recording_start_time = None
                 if gui:
                     gui.data_recording_btn.config(text="开启数据记录", bg="SystemButtonFace")
         elif status_data == "TIMELAPSE_RECORDING_AND_GPIO_STARTED":
             if not combined_status:
                 combined_status = True
-                combined_start_time = current_time
+                if not preserve_time or not combined_start_time:
+                    combined_start_time = current_time
                 if gui:
                     gui.combined_btn.config(text="停止录像+数据", bg="lightgreen")
         elif status_data == "TIMELAPSE_RECORDING_AND_GPIO_STOPPED":
             if combined_status:
                 combined_status = False
-                combined_start_time = None
+                if not preserve_time:
+                    combined_start_time = None
                 if gui:
                     gui.combined_btn.config(text="录像+数据", bg="SystemButtonFace")
         
         # 一般状态信息
-        if gui:
+        if gui and not preserve_time:  # 同步状态时不显示日志，避免重复信息
             gui.log_message(f"[状态] {status_data}")
+        elif gui and preserve_time:
+            gui.log_message(f"[状态同步] 已恢复状态: {status_data}")
         
     elif msg_type == MessageType.TEMP_HUMIDITY:
         # 温湿度数据

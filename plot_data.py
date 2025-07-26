@@ -161,7 +161,10 @@ def plot_csv_data(csv_file):
     # 为每一列创建单独的图像
     for column in data_columns:
         plt.figure(figsize=(12, 6))
-        plt.plot(df['relative_time'], df[column], linewidth=1, marker='o', markersize=2)
+        # 转换为numpy数组以避免pandas版本兼容性问题
+        x_data = df['relative_time'].to_numpy()
+        y_data = df[column].to_numpy()
+        plt.plot(x_data, y_data, linewidth=1, marker='o', markersize=2)
         plt.title(f'{column}', fontsize=14, fontweight='bold')
         plt.xlabel('Time (seconds)', fontsize=12)
         plt.ylabel(column, fontsize=12)

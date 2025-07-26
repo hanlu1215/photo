@@ -6,10 +6,9 @@ import threading
 import sys
 import time
 import json
-import hashlib
 import tkinter as tk
 from tkinter import ttk, scrolledtext
-from tkinter import messagebox, filedialog
+from tkinter import messagebox
 
 # 图像接收配置
 IMAGE_HOST = '0.0.0.0'
@@ -48,8 +47,6 @@ class MessageType:
     GPIO_DATA = "GPIO_DATA"
     TEMP_HUMIDITY = "TEMP_HUMIDITY"
     SYSTEM_INFO = "SYSTEM_INFO"
-    FILE_LIST = "FILE_LIST"
-    FILE_TRANSFER = "FILE_TRANSFER"
 
 class WiFiReceiverGUI:
     def __init__(self, root):
@@ -127,13 +124,6 @@ class WiFiReceiverGUI:
                                       command=self.send_current_image,
                                       width=15, height=2, font=("Arial", 10))
         self.send_image_btn.pack(side="left", padx=5)
-        
-        # 文件传输按钮
-        self.file_transfer_btn = tk.Button(row2_frame, text="文件传输", 
-                                         command=self.open_file_transfer,
-                                         width=15, height=2, font=("Arial", 10),
-                                         bg="lightcyan")
-        self.file_transfer_btn.pack(side="left", padx=5)
         
         # 退出程序按钮
         self.quit_btn = tk.Button(row2_frame, text="退出程序", 
@@ -229,18 +219,7 @@ class WiFiReceiverGUI:
         
         self.log_text = scrolledtext.ScrolledText(info_frame, height=15, width=80, 
                                                 font=("Consolas", 9))
-        self.log_text.pack(fill="both", expand=True)        
-        # 文件传输相关变量
-        self.file_transfer_window = None
-        self.file_list = []
-        self.current_download = None
-        self.download_buffer = b''
-        self.download_dir = ""
-        self.download_queue = []
-        self.file_tree = None
-        self.expected_md5 = ""
-        self.received_chunks = {}
-        self.expected_chunks = 0
+        self.log_text.pack(fill="both", expand=True)
         
     def log_message(self, message):
         """在日志区域添加消息"""
@@ -328,285 +307,6 @@ class WiFiReceiverGUI:
         """发送当前图像"""
         self.send_command("s")
         self.log_message("请求发送当前图像")
-    
-    def open_file_transfer(self):
-        """打开文件传输窗口"""
-        if not command_connected:
-            messagebox.showwarning("连接错误", "未连接到发送端，无法进行文件传输")
-            return
-        
-        # 如果窗口已存在，先关闭
-        if self.file_transfer_window:
-            self.file_transfer_window.destroy()
-        
-        # 创建文件传输窗口
-        self.file_transfer_window = tk.Toplevel(self.root)
-        self.file_transfer_window.title("文件传输")
-        self.file_transfer_window.geometry("600x400")
-        self.file_transfer_window.transient(self.root)
-        
-        # 请求文件列表
-        self.send_command("list_files")
-        self.log_message("正在获取发送端文件列表...")
-        
-        # 创建界面
-        self.create_file_transfer_ui()
-    
-    def create_file_transfer_ui(self):
-        """创建文件传输界面"""
-        if not self.file_transfer_window:
-            return
-        
-        # 标题
-        title_label = tk.Label(self.file_transfer_window, text="发送端文件列表", 
-                              font=("Arial", 12, "bold"))
-        title_label.pack(pady=10)
-        
-        # 文件列表框架
-        list_frame = tk.Frame(self.file_transfer_window)
-        list_frame.pack(fill="both", expand=True, padx=10, pady=5)
-        
-        # 创建Treeview来显示文件列表
-        columns = ('name', 'size', 'modified')
-        self.file_tree = ttk.Treeview(list_frame, columns=columns, show='headings', height=10)
-        
-        # 定义列标题
-        self.file_tree.heading('name', text='文件名')
-        self.file_tree.heading('size', text='大小(MB)')
-        self.file_tree.heading('modified', text='修改时间')
-        
-        # 设置列宽
-        self.file_tree.column('name', width=200)
-        self.file_tree.column('size', width=100)
-        self.file_tree.column('modified', width=150)
-        
-        # 添加滚动条
-        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=self.file_tree.yview)
-        self.file_tree.configure(yscrollcommand=scrollbar.set)
-        
-        self.file_tree.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
-        
-        # 按钮框架
-        button_frame = tk.Frame(self.file_transfer_window)
-        button_frame.pack(pady=10)
-        
-        # 下载按钮
-        self.download_btn = tk.Button(button_frame, text="下载选中文件", 
-                                    command=self.download_selected_files,
-                                    bg="lightgreen", font=("Arial", 10))
-        self.download_btn.pack(side="left", padx=5)
-        
-        # 刷新按钮
-        refresh_btn = tk.Button(button_frame, text="刷新列表", 
-                              command=self.refresh_file_list,
-                              font=("Arial", 10))
-        refresh_btn.pack(side="left", padx=5)
-        
-        # 关闭按钮
-        close_btn = tk.Button(button_frame, text="关闭", 
-                            command=self.close_file_transfer,
-                            font=("Arial", 10))
-        close_btn.pack(side="left", padx=5)
-        
-        # 进度显示框架
-        self.progress_frame = tk.Frame(self.file_transfer_window)
-        self.progress_frame.pack(fill="x", padx=10, pady=5)
-        
-        # 进度标签
-        self.progress_label = tk.Label(self.progress_frame, text="", font=("Arial", 9))
-        self.progress_label.pack()
-        
-        # 进度条
-        self.progress_bar = ttk.Progressbar(self.progress_frame, mode='determinate')
-        self.progress_bar.pack(fill="x", pady=2)
-        
-        # 速度标签
-        self.speed_label = tk.Label(self.progress_frame, text="", font=("Arial", 9))
-        self.speed_label.pack()
-        
-        # 隐藏进度显示
-        self.progress_frame.pack_forget()
-    
-    def refresh_file_list(self):
-        """刷新文件列表"""
-        self.send_command("list_files")
-        self.log_message("刷新文件列表...")
-    
-    def download_selected_files(self):
-        """下载选中的文件"""
-        if not self.file_tree:
-            return
-        
-        selected_items = self.file_tree.selection()
-        if not selected_items:
-            messagebox.showwarning("选择错误", "请先选择要下载的文件")
-            return
-        
-        # 选择保存目录
-        save_dir = filedialog.askdirectory(title="选择保存目录")
-        if not save_dir:
-            return
-        
-        self.download_dir = save_dir
-        self.download_queue = []
-        
-        # 获取选中文件的名称
-        for item in selected_items:
-            filename = self.file_tree.item(item, 'values')[0]
-            self.download_queue.append(filename)
-        
-        # 开始下载
-        self.start_download()
-    
-    def start_download(self):
-        """开始下载队列中的文件"""
-        if not self.download_queue:
-            messagebox.showinfo("下载完成", "所有文件下载完成！")
-            self.progress_frame.pack_forget()
-            return
-        
-        filename = self.download_queue.pop(0)
-        self.current_download = {
-            "filename": filename,
-            "start_time": time.time(),
-            "bytes_received": 0,
-            "total_size": 0,
-            "last_update_time": time.time()
-        }
-        
-        # 重置下载状态
-        self.download_buffer = b''
-        self.expected_md5 = ""
-        self.received_chunks = {}
-        self.expected_chunks = 0
-        
-        # 显示进度
-        self.progress_frame.pack(fill="x", padx=10, pady=5)
-        self.progress_label.config(text=f"正在下载: {filename}")
-        self.progress_bar['value'] = 0
-        self.speed_label.config(text="准备下载...")
-        
-        # 发送下载命令
-        self.send_command(f"download_file:{filename}")
-        self.log_message(f"开始下载文件: {filename}")
-    
-    def close_file_transfer(self):
-        """关闭文件传输窗口"""
-        if self.file_transfer_window:
-            self.file_transfer_window.destroy()
-            self.file_transfer_window = None
-    
-    def update_file_list_display(self):
-        """更新文件列表显示"""
-        if not self.file_tree:
-            return
-        
-        # 清空现有项目
-        for item in self.file_tree.get_children():
-            self.file_tree.delete(item)
-        
-        # 添加文件项目
-        for file_info in self.file_list:
-            self.file_tree.insert('', 'end', values=(
-                file_info['name'],
-                file_info['size_mb'],
-                file_info['modified']
-            ))
-    
-    def update_download_progress(self, bytes_sent, total_size, progress, speed_mbps=None):
-        """更新下载进度 - 优化版本"""
-        if not self.current_download:
-            return
-        
-        # 更新进度条
-        self.progress_bar['value'] = progress
-        
-        # 计算下载速度
-        current_time = time.time()
-        elapsed_time = current_time - self.current_download["start_time"]
-        
-        if speed_mbps is not None:
-            # 使用服务器提供的速度信息
-            speed_text = f"{speed_mbps:.2f} MB/s"
-        else:
-            # 本地计算速度
-            if elapsed_time > 0:
-                speed_bps = self.current_download["bytes_received"] / elapsed_time
-                speed_mbps_local = speed_bps / (1024 * 1024)
-                speed_text = f"{speed_mbps_local:.2f} MB/s"
-            else:
-                speed_text = "计算中..."
-        
-        # 计算预计剩余时间
-        if speed_mbps and speed_mbps > 0:
-            remaining_mb = (total_size - bytes_sent) / (1024 * 1024)
-            eta_seconds = remaining_mb / speed_mbps
-            if eta_seconds < 60:
-                eta_text = f"剩余 {eta_seconds:.0f}秒"
-            else:
-                eta_minutes = eta_seconds / 60
-                eta_text = f"剩余 {eta_minutes:.1f}分钟"
-        else:
-            eta_text = ""
-        
-        self.speed_label.config(text=f"速度: {speed_text} {eta_text}")
-        
-        # 更新进度文本
-        mb_sent = bytes_sent / (1024 * 1024)
-        mb_total = total_size / (1024 * 1024)
-        self.progress_label.config(text=f"下载: {self.current_download['filename']} ({mb_sent:.1f}/{mb_total:.1f} MB - {progress:.1f}%)")
-        
-        # 记录最后更新时间
-        self.current_download["last_update_time"] = current_time
-    
-    def save_downloaded_file(self):
-        """保存下载的文件 - 优化版本with校验"""
-        if not self.current_download or not self.download_buffer:
-            return
-        
-        try:
-            filename = self.current_download["filename"]
-            filepath = os.path.join(self.download_dir, filename)
-            
-            # 保存文件
-            with open(filepath, 'wb') as f:
-                f.write(self.download_buffer)
-            
-            # 验证文件完整性
-            if self.expected_md5:
-                actual_md5 = self.calculate_file_md5(filepath)
-                if actual_md5 == self.expected_md5:
-                    self.log_message(f"文件保存成功并校验通过: {filepath}")
-                    
-                    # 显示传输统计
-                    total_time = time.time() - self.current_download["start_time"]
-                    file_size_mb = len(self.download_buffer) / (1024 * 1024)
-                    avg_speed = file_size_mb / total_time if total_time > 0 else 0
-                    self.log_message(f"传输统计: 大小={file_size_mb:.2f}MB, 用时={total_time:.2f}s, 平均速度={avg_speed:.2f}MB/s")
-                else:
-                    self.log_message(f"警告: 文件校验失败! 期望MD5={self.expected_md5}, 实际MD5={actual_md5}")
-                    messagebox.showwarning("校验失败", f"文件 {filename} 校验失败，可能已损坏")
-            else:
-                self.log_message(f"文件保存成功: {filepath} (未校验)")
-            
-            self.download_buffer = b''
-            
-        except Exception as e:
-            self.log_message(f"保存文件失败: {e}")
-            messagebox.showerror("保存失败", f"保存文件失败: {e}")
-    
-    def calculate_file_md5(self, filepath):
-        """计算文件的MD5校验值"""
-        try:
-            hash_md5 = hashlib.md5()
-            with open(filepath, "rb") as f:
-                for chunk in iter(lambda: f.read(4096), b""):
-                    hash_md5.update(chunk)
-            return hash_md5.hexdigest()
-        except Exception as e:
-            self.log_message(f"计算MD5失败: {e}")
-            return ""
     
     def send_command(self, command):
         """发送指令到发送端"""
@@ -928,11 +628,7 @@ def listen_status():
                 # 尝试解析JSON格式的消息
                 try:
                     msg_obj = json.loads(message)
-                    if msg_obj.get("type") == "FILE_DATA":
-                        # 处理文件数据
-                        process_file_data(msg_obj)
-                    else:
-                        process_structured_message(msg_obj)
+                    process_structured_message(msg_obj)
                 except json.JSONDecodeError:
                     # 处理旧格式的消息
                     process_legacy_message(message)
@@ -951,40 +647,6 @@ def listen_status():
             except:
                 pass
             command_socket = None
-
-def process_file_data(msg_obj):
-    """处理文件数据 - 优化版本with校验"""
-    global gui
-    if not gui or not gui.current_download:
-        return
-    
-    try:
-        data_hex = msg_obj.get("data", "")
-        chunk_id = msg_obj.get("chunk_id", 0)
-        chunk_md5 = msg_obj.get("chunk_md5", "")
-        
-        # 将十六进制转换为字节
-        data_bytes = bytes.fromhex(data_hex)
-        
-        # 校验数据块完整性
-        if chunk_md5:
-            actual_md5 = hashlib.md5(data_bytes).hexdigest()
-            if actual_md5 != chunk_md5:
-                gui.log_message(f"警告: 数据块 {chunk_id} 校验失败")
-                return
-        
-        # 存储已接收的数据块
-        gui.received_chunks[chunk_id] = data_bytes
-        
-        # 更新接收的字节数
-        gui.current_download["bytes_received"] += len(data_bytes)
-        
-        # 累积数据到缓冲区（按顺序）
-        gui.download_buffer += data_bytes
-        
-    except Exception as e:
-        if gui:
-            gui.log_message(f"处理文件数据错误: {e}")
 
 def process_structured_message(msg_obj):
     """处理结构化的JSON消息"""
@@ -1091,54 +753,6 @@ def process_structured_message(msg_obj):
         temp_str = f"{temperature:.1f}°C" if temperature is not None else "N/A"
         hum_str = f"{humidity:.1f}%" if humidity is not None else "N/A"
         last_temp_humidity = f"温度:{temp_str}, 湿度:{hum_str}"
-    
-    elif msg_type == MessageType.FILE_LIST:
-        # 文件列表信息
-        gui.file_list = data.get("files", [])
-        current_dir = data.get("current_dir", "")
-        if gui.file_transfer_window and gui.file_tree:
-            # 更新文件列表显示
-            gui.update_file_list_display()
-        if gui:
-            gui.log_message(f"收到文件列表，共 {len(gui.file_list)} 个文件，目录: {current_dir}")
-    
-    elif msg_type == MessageType.FILE_TRANSFER:
-        # 文件传输状态
-        status = data.get("status", "")
-        if status == "start":
-            filename = data.get("filename", "")
-            size = data.get("size", 0)
-            md5_hash = data.get("md5", "")
-            if gui.current_download:
-                gui.current_download["total_size"] = size
-                gui.download_buffer = b''
-                gui.expected_md5 = md5_hash
-                gui.received_chunks = {}
-            if gui:
-                gui.log_message(f"开始接收文件: {filename} ({size} 字节, MD5: {md5_hash[:8]}...)")
-        elif status == "progress":
-            if gui.current_download:
-                bytes_sent = data.get("bytes_sent", 0)
-                total_size = data.get("total_size", 0)
-                progress = data.get("progress", 0)
-                speed_mbps = data.get("speed_mbps", None)
-                chunk_count = data.get("chunk_count", 0)
-                gui.update_download_progress(bytes_sent, total_size, progress, speed_mbps)
-        elif status == "complete":
-            filename = data.get("filename", "")
-            transfer_time = data.get("transfer_time", 0)
-            avg_speed = data.get("avg_speed_mbps", 0)
-            chunk_count = data.get("chunk_count", 0)
-            if gui.current_download and gui.download_buffer:
-                gui.save_downloaded_file()
-            if gui:
-                gui.log_message(f"文件接收完成: {filename} (用时: {transfer_time}s, 平均速度: {avg_speed}MB/s, 数据块: {chunk_count})")
-                gui.start_download()  # 下载下一个文件
-        elif status == "error":
-            message = data.get("message", "未知错误")
-            if gui:
-                gui.log_message(f"文件传输错误: {message}")
-                messagebox.showerror("传输错误", message)
 
 def process_legacy_message(message):
     """处理旧格式的消息（兼容性）"""
